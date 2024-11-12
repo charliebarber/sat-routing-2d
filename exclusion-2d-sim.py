@@ -19,35 +19,38 @@ def create_inclined_constellation(num_planes=6, sats_per_plane=10, inclination=0
             pos[node_id] = (x, y)
             G.add_node(node_id, pos=pos[node_id])
 
-            # Connect to the next satellite in the same plane (wrap around)
+            # Connect to the next satellite in the same plane (horizontal link, weight 1)
             next_sat = (sat + 1) % sats_per_plane
             if (node_id, (plane, next_sat)) not in excluded_edges:
-                G.add_edge(node_id, (plane, next_sat))
+                G.add_edge(node_id, (plane, next_sat), weight=1)  # Horizontal link
 
-            # Connect to the satellite directly in the next plane
+            # Connect to the satellite directly in the next plane (vertical link, weight 2)
             if plane < num_planes - 1:
                 if (node_id, (plane + 1, sat)) not in excluded_edges:
-                    G.add_edge(node_id, (plane + 1, sat))
+                    G.add_edge(node_id, (plane + 1, sat), weight=2)  # Vertical link
 
     return G, pos
 
-def add_ground_stations_inclined(G, pos, LDN_x, NYC_x, sats_per_plane, excluded_edges=None):
+def add_ground_stations_inclined(G, pos, sats_per_plane, num_planes, excluded_edges=None):
     excluded_edges = excluded_edges or []
-    G.add_node("LDN", pos=(LDN_x, 1))
-    G.add_node("NYC", pos=(NYC_x, -len(pos) // sats_per_plane - 1))
+    
+    # Set coordinates for LDN and NYC with custom offsets
+    LDN_pos = (sats_per_plane + 1, -1.4)  # Right and slightly above
+    NYC_pos = (-0.5, -2.5)                  # Left and slightly below
 
-    # Connect LDN to its nearest satellite in the first plane
-    if ("LDN", (0, int(LDN_x / (1 + 0.5)))) not in excluded_edges:
-        G.add_edge("LDN", (0, int(LDN_x / (1 + 0.5))))
+    # Add ground station nodes
+    G.add_node("LDN", pos=LDN_pos)
+    G.add_node("NYC", pos=NYC_pos)
 
-    # Connect NYC to its nearest satellite in the last plane
-    if ("NYC", (len(pos) // sats_per_plane - 1, int(NYC_x / (1 + 0.5)))) not in excluded_edges:
-        G.add_edge("NYC", (len(pos) // sats_per_plane - 1, int(NYC_x / (1 + 0.5))))
+    G.add_edge("LDN", (1, 11))
+    G.add_edge("NYC", (3, 0))
 
-    pos["LDN"] = (LDN_x, 1)
-    pos["NYC"] = (NYC_x, -len(pos) // sats_per_plane - 1)
+    # Update the position dictionary with the new positions for LDN and NYC
+    pos["LDN"] = LDN_pos
+    pos["NYC"] = NYC_pos
 
-def plot_inclined_constellation(G, pos, paths, excluded_edges=None):
+
+def plot_inclined_constellation(G, pos, paths, excluded_edges=None, spare_zones=None):
     excluded_edges = excluded_edges or []
     plt.figure(figsize=(14, 10))
 
@@ -93,11 +96,31 @@ def plot_inclined_constellation(G, pos, paths, excluded_edges=None):
     # Add labels for ground stations
     nx.draw_networkx_labels(G, pos, labels={"LDN": "LDN", "NYC": "NYC"}, font_size=12, font_color="black")
 
+    for i, spare_zone in enumerate(spare_zones):
+        # Get the coordinates of the nodes and apply an offset to create a slightly larger box
+        offset = 0.3  # Adjust this value to control the offset size
+        zone_coords = [
+            (pos[spare_zone[0]][0] - 2*offset, pos[spare_zone[0]][1] + offset),  # Top left corner
+            (pos[spare_zone[1]][0] + offset, pos[spare_zone[1]][1] + offset),  # Top right corner
+            (pos[spare_zone[3]][0] + 2*offset, pos[spare_zone[3]][1] - offset),  # Top-right corner
+            (pos[spare_zone[2]][0] - offset, pos[spare_zone[2]][1] - offset),  # Bottom-right corner
+        ]
+
+        # Unpack x and y coordinates for plotting
+        zone_x, zone_y = zip(*zone_coords)
+        
+        # Close the quadrilateral by appending the first corner to the end of the lists
+        zone_x = list(zone_x) + [zone_x[0]]
+        zone_y = list(zone_y) + [zone_y[0]]
+
+        # Draw the offset dotted box around the spare capacity zone
+        plt.plot(zone_x, zone_y, 'r--', linewidth=1.5, label=f"Spare Capacity Zone {i+1}")
+
     # Add satellite position labels
     satellite_labels = {node: f"{node}" for node in G.nodes if isinstance(node, tuple)}
     for node, (x, y) in pos.items():
         if node in satellite_labels:
-            plt.text(x, y - 0.25, satellite_labels[node], fontsize=8, ha="center", color="darkblue")
+            plt.text(x-0.1, y - 0.25, satellite_labels[node], fontsize=8, ha="center", color="darkblue")
 
     plt.title("Inclined 2D Projection of Satellite Constellation with Highlighted Paths")
     plt.legend(loc="upper right")
@@ -109,8 +132,8 @@ def find_multiple_shortest_paths(G, source="LDN", destination="NYC", k=4, exclud
         G_copy = G.copy()
         G_copy.remove_edges_from(excluded_edges)
         
-        # Find the k shortest paths using the modified graph
-        paths = list(islice(nx.shortest_simple_paths(G_copy, source=source, target=destination), k))
+        # Find the k shortest paths using the weighted graph
+        paths = list(islice(nx.shortest_simple_paths(G_copy, source=source, target=destination, weight="weight"), k))
         return paths
     except nx.NetworkXNoPath:
         print(f"No path found between {source} and {destination}")
@@ -158,7 +181,7 @@ def main():
     # Parameters for the constellation grid
     num_planes = 6
     sats_per_plane = 12
-    inclination = 0.9  # Controls the "angle" of each orbital plane
+    inclination = 0.53  # Controls the "angle" of each orbital plane
 
     constellation, positions = create_inclined_constellation(num_planes=num_planes, sats_per_plane=sats_per_plane, inclination=inclination)
     
@@ -171,7 +194,15 @@ def main():
     # excluded_edges = [((2,3), (3,3)), ((3,3), (4,3))]
     # excluded_edges = []
 
-    add_ground_stations_inclined(constellation, positions, LDN_x, NYC_x, sats_per_plane, excluded_edges)
+    # Spare capacity nodes (X1, X2, Y1, Y2)
+    # spare_zone = [(4, 3), (4, 9), (5, 3), (5, 9)]
+    # spare_zone_1 = [(0,0), (0, 11), (1, 0), (1, 11)]
+    spare_zone_1 = [(0,0), (0, 11), (0, 0), (0, 11)]
+    spare_zone_2 = [(4, 0), (4, 3), (5, 0), (5, 4)]
+    spare_zone_3 = [(5, 8), (5, 10), (5, 8), (5, 10)]
+    spare_zones = [spare_zone_1, spare_zone_2, spare_zone_3]
+
+    add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
 
     paths = find_multiple_shortest_paths(constellation, source="LDN", destination="NYC", k=4, excluded_edges=excluded_edges)
 
@@ -179,7 +210,7 @@ def main():
 
     save_ns3_code_to_file(ns3_code)
 
-    plot_inclined_constellation(constellation, positions, paths, excluded_edges)
+    plot_inclined_constellation(constellation, positions, paths, excluded_edges, spare_zones)
 
 if __name__ == "__main__":
     main()
