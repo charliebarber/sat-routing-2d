@@ -7,7 +7,6 @@ def create_inclined_constellation(num_planes=6, sats_per_plane=10, inclination=0
     G = nx.Graph()
     pos = {}
 
-    # Initialize excluded_edges as an empty list if None
     excluded_edges = excluded_edges or []
 
     # Create satellites in an inclined grid format
@@ -246,15 +245,14 @@ def main():
     # excluded_edges = [((0, 1), (0, 2)), ((0, 1), (0, 3))]
     # excluded_edges = [((0, 1), (0, 2)), ((4,4), (5,4))]
     # excluded_edges = [((2,3), (3,3)), ((3,3), (4,3))]
-    excluded_edges = [((0,6 ), (0,7))]
+    excluded_edges = [((0, 6), (0,7))]
 
     # Spare capacity nodes (X1, X2, Y1, Y2)
     # spare_zone = [(4, 3), (4, 9), (5, 3), (5, 9)]
     # spare_zone_1 = [(0,0), (0, 11), (1, 0), (1, 11)]
     spare_zone_1 = [(0,0), (0, 11), (0, 0), (0, 11)]
-    spare_zone_2 = [(4, 1), (4, 3), (5, 1), (5, 4)]
-    spare_zone_3 = [(5, 8), (5, 10), (5, 8), (5, 10)]
-    spare_zones = [spare_zone_1, spare_zone_2, spare_zone_3]
+    # spare_zone_2 = [(4, 1), (4, 9), (5, 1), (5, 9)]
+    spare_zones = [spare_zone_1]
     # spare_zones = []
 
     add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
