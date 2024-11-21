@@ -138,6 +138,15 @@ def find_multiple_shortest_paths(G, source="LDN", destination="NYC", k=4, exclud
     except nx.NetworkXNoPath:
         print(f"No path found between {source} and {destination}")
         return []
+    
+def ensure_edge_weights(G, default_horizontal=1, default_vertical=2):
+    for u, v, data in G.edges(data=True):
+        # Assign default weights if missing
+        if "weight" not in data:
+            if u[0] == v[0]:  # Horizontal link
+                data["weight"] = default_horizontal
+            else:  # Vertical link
+                data["weight"] = default_vertical
 
 def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=None, excluded_edges=None):
     spare_zones = spare_zones or []
@@ -147,11 +156,8 @@ def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=No
     G_copy = G.copy()
     G_copy.remove_edges_from(excluded_edges)
 
-    # Ensure every edge has a weight
-    for u, v in G_copy.edges:
-        if 'weight' not in G_copy[u][v]:
-            G_copy[u][v]['weight'] = 1  # Default weight if missing
-
+    # # Ensure every edge has a weight
+    ensure_edge_weights(G_copy)
 
     all_paths = []
 
@@ -184,7 +190,7 @@ def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=No
 
     # Sort all paths by their total weight and return the shortest ones
     all_paths = sorted(all_paths, key=lambda path: nx.path_weight(G_copy, path, weight="weight"))
-    return all_paths[:4]  # Return the top 4 shortest paths
+    return all_paths[:1]  # Return the top 4 shortest paths
 
 def generate_ns3_code_for_paths(paths, num_satellites=60):
     ns3_code = []
@@ -231,7 +237,8 @@ def main():
     inclination = 0.53  # Controls the "angle" of each orbital plane
 
     constellation, positions = create_inclined_constellation(num_planes=num_planes, sats_per_plane=sats_per_plane, inclination=inclination)
-    
+    ensure_edge_weights(constellation)
+
     LDN_x = 4  # X-coordinate near first plane
     NYC_x = 7     # X-coordinate near last plane
 
@@ -239,7 +246,7 @@ def main():
     # excluded_edges = [((0, 1), (0, 2)), ((0, 1), (0, 3))]
     # excluded_edges = [((0, 1), (0, 2)), ((4,4), (5,4))]
     # excluded_edges = [((2,3), (3,3)), ((3,3), (4,3))]
-    excluded_edges = [((3,0), (3,1))]
+    excluded_edges = [((0,6 ), (0,7))]
 
     # Spare capacity nodes (X1, X2, Y1, Y2)
     # spare_zone = [(4, 3), (4, 9), (5, 3), (5, 9)]
@@ -248,6 +255,7 @@ def main():
     spare_zone_2 = [(4, 1), (4, 3), (5, 1), (5, 4)]
     spare_zone_3 = [(5, 8), (5, 10), (5, 8), (5, 10)]
     spare_zones = [spare_zone_1, spare_zone_2, spare_zone_3]
+    # spare_zones = []
 
     add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
 
