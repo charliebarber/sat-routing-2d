@@ -244,7 +244,7 @@ def main():
     # excluded_edges = [((0, 1), (0, 2)), ((0, 1), (0, 3))]
     # excluded_edges = [((0, 1), (0, 2)), ((4,4), (5,4))]
     # excluded_edges = [((2,3), (3,3)), ((3,3), (4,3))]
-    excluded_edges = [((0, 6), (0,7)), ((0, 5), (0, 6)), ((1, 6), (1, 7))]
+    excluded_edges = [((0, 6), (0,7)), ((0, 5), (0, 6)), ((1, 6), (1, 7)), ((1, 7), (1, 8)), ((1, 8), (1, 9)), ((1, 9), (1, 10))]
 
     # Spare capacity nodes (X1, X2, Y1, Y2)
     # spare_zone = [(4, 3), (4, 9), (5, 3), (5, 9)]
@@ -257,6 +257,7 @@ def main():
     add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
 
     paths = find_path_via_spare_zones(constellation, source="LDN", destination="NYC", spare_zones=spare_zones, excluded_edges=excluded_edges)
+    # paths = find_path_via_spare_zones(constellation, source="NYC", destination="LDN", spare_zones=spare_zones, excluded_edges=excluded_edges)
 
     # ns3_code = generate_ns3_code_for_paths(paths)
 
