@@ -17,7 +17,7 @@ def create_inclined_constellation(num_planes=6, sats_per_plane=10, inclination=0
             y = -plane
             pos[node_id] = (x, y)
             G.add_node(node_id, pos=pos[node_id])
-            print(f"Created node: ({plane}, {sat})")
+            # print(f"Created node: ({plane}, {sat})")
 
             # Connect to the next satellite in the same plane (horizontal link)
             next_sat = (sat + 1) % sats_per_plane
@@ -25,13 +25,13 @@ def create_inclined_constellation(num_planes=6, sats_per_plane=10, inclination=0
             if sat != sats_per_plane - 1:  # Avoid connecting the last satellite to the first one
                 if (node_id, (plane, next_sat)) not in excluded_edges:
                     G.add_edge(node_id, (plane, next_sat))  # Horizontal link
-                    print(f"Created edge: ({node_id}) -> ({(plane, next_sat)})")
+                    # print(f"Created edge: ({node_id}) -> ({(plane, next_sat)})")
 
             # Connect to the satellite directly in the next plane (vertical link)
             if plane < num_planes - 1:
                 if (node_id, (plane + 1, sat)) not in excluded_edges:
                     G.add_edge(node_id, (plane + 1, sat))  # Vertical link
-                    print(f"Created edge: ({node_id}) -> ({(plane + 1, sat)})")
+                    # print(f"Created edge: ({node_id}) -> ({(plane + 1, sat)})")
 
     return G, pos
 
@@ -155,6 +155,7 @@ def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=No
 
     src_to_zone_path = []
     dst_to_zone_path = []
+    selected_zone = []
     zone_entry_node = None
     zone_exit_node = None
 
@@ -169,31 +170,25 @@ def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=No
                 if len(src_to_zone_path) == 0 or len(src_to_zone) < len(src_to_zone_path):
                     src_to_zone_path = src_to_zone
                     zone_entry_node = zone_node
-
-                    # Remove edges used in path_to_zone from the graph copy to avoid reuse
-                    # G_temp = G_copy.copy()
-                    # G_temp.remove_edges_from(zip(path_to_zone, path_to_zone[1:]))
-
-                # Find shortest path from the destination to any spare zone node in modified graph
-                dst_to_zone = nx.shortest_path(G_copy, source=destination, target=zone_node)
-                # Compare with current shortest path
-                if len(dst_to_zone_path) == 0 or len(dst_to_zone) < len(dst_to_zone_path):
-                    dst_to_zone_path = dst_to_zone[::-1]
-                    zone_exit_node = zone_node
+                    selected_zone = zone
 
             except nx.NetworkXNoPath:
                 print(f"No path found from {source} to {destination} via node {zone_node} in zone {zone}")
                 continue
 
-    print(zone_entry_node, zone_exit_node)
+    for zone_node in selected_zone:
+        # Find shortest path from the destination to any spare zone node in modified graph
+        dst_to_zone = nx.shortest_path(G_copy, source=destination, target=zone_node)
+        # Compare with current shortest path
+        if len(dst_to_zone_path) == 0 or len(dst_to_zone) < len(dst_to_zone_path):
+            dst_to_zone_path = dst_to_zone[::-1]
+            zone_exit_node = zone_node
+
+    # print(zone_entry_node, zone_exit_node)
 
     in_zone_path = nx.shortest_path(G_copy, source=zone_entry_node, target=zone_exit_node)
-    print(src_to_zone_path[1:-1])
-    print(in_zone_path)
-    print(dst_to_zone_path[1:-1])
 
     path = src_to_zone_path[1:-1] + in_zone_path + dst_to_zone_path[1:-1]
-    print(path)
     return [path]
 
 def generate_ns3_code_for_paths(paths, num_satellites=60):
@@ -249,14 +244,14 @@ def main():
     # excluded_edges = [((0, 1), (0, 2)), ((0, 1), (0, 3))]
     # excluded_edges = [((0, 1), (0, 2)), ((4,4), (5,4))]
     # excluded_edges = [((2,3), (3,3)), ((3,3), (4,3))]
-    excluded_edges = [((0, 6), (0,7))]
+    excluded_edges = [((0, 6), (0,7)), ((0, 5), (0, 6)), ((1, 6), (1, 7))]
 
     # Spare capacity nodes (X1, X2, Y1, Y2)
     # spare_zone = [(4, 3), (4, 9), (5, 3), (5, 9)]
     # spare_zone_1 = [(0,0), (0, 11), (1, 0), (1, 11)]
     spare_zone_1 = [(0,0), (0, 11), (0, 0), (0, 11)]
-    # spare_zone_2 = [(4, 1), (4, 9), (5, 1), (5, 9)]
-    spare_zones = [spare_zone_1]
+    spare_zone_2 = [(4, 1), (4, 9), (5, 1), (5, 9)]
+    spare_zones = [spare_zone_1, spare_zone_2]
     # spare_zones = []
 
     add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
