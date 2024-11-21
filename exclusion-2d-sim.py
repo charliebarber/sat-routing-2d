@@ -17,16 +17,21 @@ def create_inclined_constellation(num_planes=6, sats_per_plane=10, inclination=0
             y = -plane
             pos[node_id] = (x, y)
             G.add_node(node_id, pos=pos[node_id])
+            print(f"Created node: ({plane}, {sat})")
 
-            # Connect to the next satellite in the same plane (horizontal link, weight 1)
+            # Connect to the next satellite in the same plane (horizontal link)
             next_sat = (sat + 1) % sats_per_plane
-            if (node_id, (plane, next_sat)) not in excluded_edges:
-                G.add_edge(node_id, (plane, next_sat), weight=1)  # Horizontal link with weight 1
+            # Exclude the link between the last and first satellite of the same plane
+            if sat != sats_per_plane - 1:  # Avoid connecting the last satellite to the first one
+                if (node_id, (plane, next_sat)) not in excluded_edges:
+                    G.add_edge(node_id, (plane, next_sat))  # Horizontal link
+                    print(f"Created edge: ({node_id}) -> ({(plane, next_sat)})")
 
-            # Connect to the satellite directly in the next plane (vertical link, weight 2)
+            # Connect to the satellite directly in the next plane (vertical link)
             if plane < num_planes - 1:
                 if (node_id, (plane + 1, sat)) not in excluded_edges:
-                    G.add_edge(node_id, (plane + 1, sat), weight=2)  # Vertical link with weight 2
+                    G.add_edge(node_id, (plane + 1, sat))  # Vertical link
+                    print(f"Created edge: ({node_id}) -> ({(plane + 1, sat)})")
 
     return G, pos
 
@@ -125,27 +130,20 @@ def plot_inclined_constellation(G, pos, paths, excluded_edges=None, spare_zones=
     plt.legend(loc="upper right")
     plt.show()
 
-def find_multiple_shortest_paths(G, source="LDN", destination="NYC", k=4, excluded_edges=None):
-    try:
-        # Remove the excluded edges temporarily for pathfinding
-        G_copy = G.copy()
-        G_copy.remove_edges_from(excluded_edges)
-        
-        # Find the k shortest paths using the weighted graph
-        paths = list(islice(nx.shortest_simple_paths(G_copy, source=source, target=destination, weight="weight"), k))
-        return paths
-    except nx.NetworkXNoPath:
-        print(f"No path found between {source} and {destination}")
-        return []
-    
-def ensure_edge_weights(G, default_horizontal=1, default_vertical=2):
-    for u, v, data in G.edges(data=True):
-        # Assign default weights if missing
-        if "weight" not in data:
-            if u[0] == v[0]:  # Horizontal link
-                data["weight"] = default_horizontal
-            else:  # Vertical link
-                data["weight"] = default_vertical
+def generate_nodes_from_zone(zone_corners):
+    """
+    Generate all nodes within the rectangular grid defined by 4 corner nodes.
+    Assumes the zone is aligned along axes.
+    """
+    # Extract min and max coordinates from the zone corners
+    x_coords = [corner[0] for corner in zone_corners]
+    y_coords = [corner[1] for corner in zone_corners]
+    min_x, max_x = min(x_coords), max(x_coords)
+    min_y, max_y = min(y_coords), max(y_coords)
+
+    # Generate all nodes within the rectangular area
+    return [(x, y) for x in range(min_x, max_x + 1) for y in range(min_y, max_y + 1)]
+
 
 def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=None, excluded_edges=None):
     spare_zones = spare_zones or []
@@ -155,41 +153,48 @@ def find_path_via_spare_zones(G, source="LDN", destination="NYC", spare_zones=No
     G_copy = G.copy()
     G_copy.remove_edges_from(excluded_edges)
 
-    # # Ensure every edge has a weight
-    ensure_edge_weights(G_copy)
-
-    all_paths = []
+    src_to_zone_path = []
+    dst_to_zone_path = []
+    zone_entry_node = None
+    zone_exit_node = None
 
     for zone in spare_zones:
-        # Identify candidate nodes in this spare zone
-        zone_nodes = zone
-
-        # For each node in the spare zone, find paths that do not reuse edges
+        # For each node in the spare zone, find shortest path from source that do not reuse edges
+        zone_nodes = generate_nodes_from_zone(zone)
         for zone_node in zone_nodes:
             try:
                 # Find shortest path from source to the current spare zone node
-                path_to_zone = nx.shortest_path(G_copy, source=source, target=zone_node, weight="weight")
-                
-                # Remove edges used in path_to_zone from the graph copy to avoid reuse
-                G_temp = G_copy.copy()
-                G_temp.remove_edges_from(zip(path_to_zone, path_to_zone[1:]))
+                src_to_zone = nx.shortest_path(G_copy, source=source, target=zone_node)
+                # Compare with current shortest path and replace
+                if len(src_to_zone_path) == 0 or len(src_to_zone) < len(src_to_zone_path):
+                    src_to_zone_path = src_to_zone
+                    zone_entry_node = zone_node
 
-                # Find shortest path from the spare zone node to the destination in the modified graph
-                path_from_zone = nx.shortest_path(G_temp, source=zone_node, target=destination, weight="weight")
+                    # Remove edges used in path_to_zone from the graph copy to avoid reuse
+                    # G_temp = G_copy.copy()
+                    # G_temp.remove_edges_from(zip(path_to_zone, path_to_zone[1:]))
 
-                # Combine the two paths
-                full_path = path_to_zone + path_from_zone[1:]  # Avoid repeating the spare zone node
-
-                # Add the combined path to all_paths
-                all_paths.append(full_path)
+                # Find shortest path from the destination to any spare zone node in modified graph
+                dst_to_zone = nx.shortest_path(G_copy, source=destination, target=zone_node)
+                # Compare with current shortest path
+                if len(dst_to_zone_path) == 0 or len(dst_to_zone) < len(dst_to_zone_path):
+                    dst_to_zone_path = dst_to_zone[::-1]
+                    zone_exit_node = zone_node
 
             except nx.NetworkXNoPath:
                 print(f"No path found from {source} to {destination} via node {zone_node} in zone {zone}")
                 continue
 
-    # Sort all paths by their total weight and return the shortest ones
-    all_paths = sorted(all_paths, key=lambda path: nx.path_weight(G_copy, path, weight="weight"))
-    return all_paths[:1]  # Return the top 4 shortest paths
+    print(zone_entry_node, zone_exit_node)
+
+    in_zone_path = nx.shortest_path(G_copy, source=zone_entry_node, target=zone_exit_node)
+    print(src_to_zone_path[1:-1])
+    print(in_zone_path)
+    print(dst_to_zone_path[1:-1])
+
+    path = src_to_zone_path[1:-1] + in_zone_path + dst_to_zone_path[1:-1]
+    print(path)
+    return [path]
 
 def generate_ns3_code_for_paths(paths, num_satellites=60):
     ns3_code = []
@@ -236,7 +241,6 @@ def main():
     inclination = 0.53  # Controls the "angle" of each orbital plane
 
     constellation, positions = create_inclined_constellation(num_planes=num_planes, sats_per_plane=sats_per_plane, inclination=inclination)
-    ensure_edge_weights(constellation)
 
     LDN_x = 4  # X-coordinate near first plane
     NYC_x = 7     # X-coordinate near last plane
@@ -257,12 +261,11 @@ def main():
 
     add_ground_stations_inclined(constellation, positions, sats_per_plane, num_planes, excluded_edges)
 
-    # paths = find_multiple_shortest_paths(constellation, source="LDN", destination="NYC", k=4, excluded_edges=excluded_edges)
     paths = find_path_via_spare_zones(constellation, source="LDN", destination="NYC", spare_zones=spare_zones, excluded_edges=excluded_edges)
 
-    ns3_code = generate_ns3_code_for_paths(paths)
+    # ns3_code = generate_ns3_code_for_paths(paths)
 
-    save_ns3_code_to_file(ns3_code)
+    # save_ns3_code_to_file(ns3_code)
 
     plot_inclined_constellation(constellation, positions, paths, excluded_edges, spare_zones)
 
