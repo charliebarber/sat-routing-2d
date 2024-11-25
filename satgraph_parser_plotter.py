@@ -17,15 +17,14 @@ with open('snapshots/snapshot0.02s.txt', 'r') as file:
             if node_match:
                 node = int(node_match.group(1))
                 G.add_node(node)  # Add the node to the graph
-                print(f"Added node {node}")  # Debugging: Print node being added
         
         # Check for links in the line
-        # Updated regex to allow for negative numbers (\-?\d+)
-        link_matches = re.findall(r"Link \((\-?\d+),(\-?\d+)\) \(length ([\d.]+), y value of the midpoint ([\d.]+)\)", line)
+        link_matches = re.findall(r"Link \((\-?\d+),(\-?\d+)\) \(length ([\d.]+), y value of the midpoint ([\-.\d]+)\)", line)
         for link in link_matches:
             node1, node2, length, y_value = int(link[0]), int(link[1]), float(link[2]), float(link[3])
             G.add_edge(node1, node2, length=length, y_value=y_value)  # Add edge with length and y-value
-            print(f"Added edge - {node1} -> {node2}")  # Debugging: Print edge being added
+            print(f"Added edge: {node1} -> {node2} , length = {length}, y_value = {y_value}")
+
 
 
 # Get the neighbours of nodes -1 and -2
@@ -128,21 +127,5 @@ labels = {node: str(node) for node in subgraph.nodes() if node in ground_station
 nx.draw_networkx_labels(subgraph, pos, labels, font_size=10, font_color='black')
 
 # Add title and display
-plt.axis('off')
-plt.show()
-
-# Check the nodes and edges of the subgraph
-print(f"Subgraph nodes: {list(subgraph.nodes())}")
-print(f"Subgraph edges: {list(subgraph.edges())}")
-
-# Now you can visualize or process the filtered subgraph
-pos = nx.spring_layout(subgraph, seed=42, weight="length")  # Using spring layout for the visualization
-
-# Plot the subgraph
-plt.figure(figsize=(8, 8))
-nx.draw_networkx_nodes(subgraph, pos, node_size=300, node_color='skyblue')
-nx.draw_networkx_labels(subgraph, pos, font_size=10, font_weight='bold')
-nx.draw_networkx_edges(subgraph, pos, width=1, alpha=0.7, edge_color='gray')
-
 plt.axis('off')
 plt.show()
