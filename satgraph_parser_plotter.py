@@ -70,7 +70,7 @@ for node in subgraph.nodes():
         continue
     elif x < 26 or x > 38:
         nodes_to_remove.append(node)
-    elif y < -10 or y > -4:
+    elif y < -9 or y > -4:
         nodes_to_remove.append(node)
     # else:
         # print(f"node: {node}, pos: {pos}")
@@ -94,6 +94,8 @@ for node in subgraph.nodes():
 # Edge styling: Differentiate shortest path edges
 edge_colors = []
 edge_widths = []
+edge_font_color = []
+edge_labels = []
 for edge in subgraph.edges():
     node1, node2 = edge
     if node1 in (shortest_path) and node2 in (shortest_path):  # Both nodes are in the shortest path
@@ -109,7 +111,7 @@ for edge in subgraph.edges():
 # pos = nx.spring_layout(subgraph, seed=22)  # Increase k to spread nodes more
 
 # Plot the graph
-plt.figure(figsize=(10, 10))
+plt.figure(figsize=(12, 12))
 
 # Draw nodes
 nx.draw_networkx_nodes(subgraph, positions, node_size=node_sizes, node_color=node_colors, alpha=0.9)
@@ -117,9 +119,14 @@ nx.draw_networkx_nodes(subgraph, positions, node_size=node_sizes, node_color=nod
 # Draw edges
 nx.draw_networkx_edges(subgraph, positions, edge_color=edge_colors, width=edge_widths, alpha=0.7)
 
-# Label important nodes only
-labels = {node: str(node) for node in subgraph.nodes() }
-nx.draw_networkx_labels(G, positions, labels, font_size=5, font_color='black')
+# Label important nodes
+labels = {node: "LDN" if node == -1 else "NYC" if node == -2 else str(node) for node in subgraph.nodes()}
+nx.draw_networkx_labels(subgraph, positions, labels, font_size=8, font_color='black')
+
+# Add edge labels to display weights
+edge_labels = nx.get_edge_attributes(subgraph, 'length')
+nx.draw_networkx_edge_labels(subgraph, positions, edge_labels=edge_labels, font_size=3)
+
 
 # Add title and display
 plt.axis('off')
