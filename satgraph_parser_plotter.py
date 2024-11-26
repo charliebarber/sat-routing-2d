@@ -46,6 +46,7 @@ positions[-1] = (38.5, -5.5) # LDN
 positions[-2] = (25, -6.5) # NYC
 
 shortest_path = None
+second_shortest = None
 
 # Find the shortest path from -1 to -2
 if -1 in G.nodes and -2 in G.nodes:
@@ -54,6 +55,7 @@ if -1 in G.nodes and -2 in G.nodes:
         print(f"Shortest path from -1 to -2: {shortest_path}")
     except nx.NetworkXNoPath:
         print("No path found between node -1 and node -2.")
+
 
 
 # Create a subgraph containing nearby nodes to path
@@ -68,14 +70,40 @@ for node in subgraph.nodes():
     y = pos[1]
     if node in ground_stations:
         continue
-    elif x < 26 or x > 38:
+    elif x < 26 or x > 40:
         nodes_to_remove.append(node)
-    elif y < -9 or y > -4:
+    elif y < -8 or y > -4:
         nodes_to_remove.append(node)
     # else:
         # print(f"node: {node}, pos: {pos}")
 
 subgraph.remove_nodes_from(nodes_to_remove)
+
+G_copy = subgraph.copy()
+G_copy.remove_nodes_from(shortest_path[1:-1])
+second_shortest = nx.shortest_path(G_copy, source=-1, target=-2, weight="length")
+second_shortest_length = nx.shortest_path_length(G_copy, source=-1, target=-2, weight="length")
+print(f"second_shortest: {second_shortest} length: {second_shortest_length}")
+
+second_weight = 0
+for u, v in zip(second_shortest, second_shortest[1:]):
+    weight = subgraph[u][v]['length']
+    print(f" Edge: {u, v} - Weight: {weight}")
+    second_weight += weight
+print(f"second_weight: {second_weight}")
+
+G_copy2 = G_copy.copy()
+G_copy2.remove_nodes_from(second_shortest[1:-1])
+third_shortest = nx.shortest_path(G_copy2, source=-1, target=-2, weight="length")
+third_shortest_length = nx.shortest_path_length(G_copy2, source=-1, target=-2, weight="length")
+print(f"third_shortest: {third_shortest} length: {third_shortest_length}")
+
+third_weight = 0
+for u, v in zip(third_shortest, third_shortest[1:]):
+    weight = subgraph[u][v]['length']
+    print(f" Edge: {u, v} - Weight: {weight}")
+    third_weight += weight
+print(f"third_weight: {third_weight}")
 
 # Node coloring and sizing
 node_colors = []
@@ -100,6 +128,9 @@ for edge in subgraph.edges():
     node1, node2 = edge
     if node1 in (shortest_path) and node2 in (shortest_path):  # Both nodes are in the shortest path
         edge_colors.append('red')
+        edge_widths.append(2)
+    elif (node1 in (second_shortest) and node2 in (second_shortest)) or (node1 in (third_shortest) and node2 in (third_shortest)):
+        edge_colors.append('green')
         edge_widths.append(2)
     elif node1 in ground_stations or node2 in ground_stations:  # GS-Sat links
         edge_colors.append("blue")
