@@ -113,7 +113,7 @@ for node in subgraph.nodes():
         node_colors.append('red')  # Ground stations
         node_sizes.append(400)
     elif node in shortest_path:
-        node_colors.append('green')  # Shortest path nodes
+        node_colors.append('orange')  # Shortest path nodes
         node_sizes.append(300)
     else:
         node_colors.append('skyblue')  # Other nodes
@@ -124,20 +124,25 @@ edge_colors = []
 edge_widths = []
 edge_font_color = []
 edge_labels = []
+edge_styles = []
 for edge in subgraph.edges():
     node1, node2 = edge
     if node1 in (shortest_path) and node2 in (shortest_path):  # Both nodes are in the shortest path
-        edge_colors.append('red')
+        edge_colors.append('orange')
         edge_widths.append(2)
+        edge_styles.append('-')
     elif (node1 in (second_shortest) and node2 in (second_shortest)) or (node1 in (third_shortest) and node2 in (third_shortest)):
         edge_colors.append('green')
         edge_widths.append(2)
+        edge_styles.append('-')
     elif node1 in ground_stations or node2 in ground_stations:  # GS-Sat links
         edge_colors.append("blue")
         edge_widths.append(0.5)
+        edge_styles.append('--')
     else:  # Inter-orbit links and intra
         edge_colors.append("gray")
         edge_widths.append(0.5)
+        edge_styles.append('-')
 # Use a less cluttered layout
 # pos = nx.spring_layout(subgraph, seed=22)  # Increase k to spread nodes more
 
@@ -148,7 +153,7 @@ plt.figure(figsize=(12, 12))
 nx.draw_networkx_nodes(subgraph, positions, node_size=node_sizes, node_color=node_colors, alpha=0.9)
 
 # Draw edges
-nx.draw_networkx_edges(subgraph, positions, edge_color=edge_colors, width=edge_widths, alpha=0.7)
+nx.draw_networkx_edges(subgraph, positions, edge_color=edge_colors, width=edge_widths, style=edge_styles, alpha=0.7)
 
 # Label important nodes
 labels = {node: "LDN" if node == -1 else "NYC" if node == -2 else str(node) for node in subgraph.nodes()}
@@ -156,7 +161,9 @@ nx.draw_networkx_labels(subgraph, positions, labels, font_size=8, font_color='bl
 
 # Add edge labels to display weights
 edge_labels = nx.get_edge_attributes(subgraph, 'length')
-nx.draw_networkx_edge_labels(subgraph, positions, edge_labels=edge_labels, font_size=3)
+# Round the edge labels for better displaying
+rounded_edge_labels = {key: round(val, 1) for key, val in edge_labels.items()}
+nx.draw_networkx_edge_labels(subgraph, positions, edge_labels=rounded_edge_labels, font_size=3, verticalalignment="bottom", alpha=0.9)
 
 
 # Add title and display
