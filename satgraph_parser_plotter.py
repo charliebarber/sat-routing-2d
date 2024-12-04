@@ -45,6 +45,23 @@ for node in G.nodes():
 positions[-1] = (38.5, -5.5) # LDN
 positions[-2] = (25, -6.5) # NYC
 
+# spare zone is 4-tuple: top left, top right, 
+spare_zones = [(269, 328, 334, 393), (467, 522, 532, 587)]
+
+def generate_nodes_from_zone(zone_corners):
+    """
+    Generate all nodes within the rectangular grid defined by 4 corner nodes.
+    Assumes the zone is aligned along axes.
+    """
+    # Extract min and max coordinates from the zone corners
+    x_coords = [corner[0] for corner in zone_corners]
+    y_coords = [corner[1] for corner in zone_corners]
+    min_x, max_x = min(x_coords), max(x_coords)
+    min_y, max_y = min(y_coords), max(y_coords)
+
+    # Generate all nodes within the rectangular area
+    return [(x, y) for x in range(min_x, max_x + 1) for y in range(min_y, max_y + 1)]
+
 shortest_path = None
 second_shortest = None
 
@@ -113,7 +130,7 @@ for node in subgraph.nodes():
         node_colors.append('red')  # Ground stations
         node_sizes.append(400)
     elif node in shortest_path:
-        node_colors.append('orange')  # Shortest path nodes
+        node_colors.append('royalblue')  # Shortest path nodes
         node_sizes.append(300)
     else:
         node_colors.append('skyblue')  # Other nodes
@@ -128,13 +145,13 @@ edge_styles = []
 for edge in subgraph.edges():
     node1, node2 = edge
     if node1 in (shortest_path) and node2 in (shortest_path):  # Both nodes are in the shortest path
-        edge_colors.append('orange')
+        edge_colors.append('black')
         edge_widths.append(2)
         edge_styles.append('-')
-    elif (node1 in (second_shortest) and node2 in (second_shortest)) or (node1 in (third_shortest) and node2 in (third_shortest)):
-        edge_colors.append('green')
-        edge_widths.append(2)
-        edge_styles.append('-')
+    # elif (node1 in (second_shortest) and node2 in (second_shortest)) or (node1 in (third_shortest) and node2 in (third_shortest)):
+        # edge_colors.append('green')
+        # edge_widths.append(2)
+        # edge_styles.append('-')
     elif node1 in ground_stations or node2 in ground_stations:  # GS-Sat links
         edge_colors.append("blue")
         edge_widths.append(0.5)
@@ -165,6 +182,27 @@ edge_labels = nx.get_edge_attributes(subgraph, 'length')
 rounded_edge_labels = {key: round(val, 1) for key, val in edge_labels.items()}
 nx.draw_networkx_edge_labels(subgraph, positions, edge_labels=rounded_edge_labels, font_size=3, verticalalignment="bottom", alpha=0.9)
 
+for i, spare_zone in enumerate(spare_zones):
+    # Get the coordinates of the nodes and apply an offset to create a slightly larger box
+    offset = 0.25  # Adjust this value to control the offset size
+    zone_coords = [
+        (positions[spare_zone[0]][0] - 2*offset, positions[spare_zone[0]][1] + offset),  # Top left corner
+        (positions[spare_zone[1]][0] + offset, positions[spare_zone[1]][1] + offset),  # Top right corner
+        (positions[spare_zone[3]][0] + 2*offset, positions[spare_zone[3]][1] - offset),  # Top-right corner
+        (positions[spare_zone[2]][0] - offset, positions[spare_zone[2]][1] - offset),  # Bottom-right corner
+    ]
+
+    print(f"zone_coords: {zone_coords}")
+
+    # Unpack x and y coordinates for plotting
+    zone_x, zone_y = zip(*zone_coords)
+    
+    # Close the quadrilateral by appending the first corner to the end of the lists
+    zone_x = list(zone_x) + [zone_x[0]]
+    zone_y = list(zone_y) + [zone_y[0]]
+
+    # Draw the offset dotted box around the spare capacity zone
+    plt.plot(zone_x, zone_y, 'r--', linewidth=1.0, label=f"Spare Capacity Zone {i+1}")
 
 # Add title and display
 plt.axis('off')
