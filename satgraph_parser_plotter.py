@@ -146,26 +146,128 @@ def find_multiple_paths(subgraph, source=-1, target=-2):
     
     return paths, lengths
 
-def get_node_styling(node, ground_stations, shortest_path):
+def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2, excluded_edges=None):
+    """
+    Find shortest path from source to destination via spare zones.
+    
+    Args:
+        G: NetworkX graph
+        positions: Dict of node positions
+        nodes_in_zones: Dict mapping zone indices to lists of nodes in each zone
+        source: Source node (default: -1 for LDN)
+        target: Target node (default: -2 for NYC)
+        excluded_edges: List of edges to exclude from path finding
+    
+    Returns:
+        List containing the complete path via spare zone
+    """
+    excluded_edges = excluded_edges or []
+    G_copy = G.copy()
+    G_copy.remove_edges_from(excluded_edges)
+    
+    # Initialize variables for best paths
+    best_src_to_zone = []
+    best_dst_to_zone = []
+    best_zone_entry = None
+    best_zone_exit = None
+    best_zone_idx = None
+    
+    # Find best zone and entry/exit points
+    for zone_idx, zone_nodes in nodes_in_zones.items():
+        for zone_node in zone_nodes:
+            try:
+                # Find shortest path from source to zone node
+                src_to_zone = nx.shortest_path(G_copy, source=source, target=zone_node, weight='length')
+                
+                # Update if this is the shortest path found so far
+                if not best_src_to_zone or len(src_to_zone) < len(best_src_to_zone):
+                    best_src_to_zone = src_to_zone
+                    best_zone_entry = zone_node
+                    best_zone_idx = zone_idx
+            except nx.NetworkXNoPath:
+                continue
+    
+    # If we found a valid zone entry point, find best exit point
+    if best_zone_entry is not None:
+        for zone_node in nodes_in_zones[best_zone_idx]:
+            try:
+                # Find shortest path from zone node to destination
+                dst_to_zone = nx.shortest_path(G_copy, source=target, target=zone_node, weight='length')
+                
+                # Update if this is the shortest path found so far
+                if not best_dst_to_zone or len(dst_to_zone) < len(best_dst_to_zone):
+                    best_dst_to_zone = dst_to_zone[::-1]  # Reverse path since we found it backwards
+                    best_zone_exit = zone_node
+            except nx.NetworkXNoPath:
+                continue
+    
+    # If we found valid entry and exit points, construct complete path
+    if best_zone_entry is not None and best_zone_exit is not None:
+        # Find path through the zone
+        in_zone_path = nx.shortest_path(G_copy, source=best_zone_entry, target=best_zone_exit, weight='length')
+        
+        # Combine paths, removing duplicate nodes at connections
+        complete_path = (best_src_to_zone[:-1] + 
+                        in_zone_path + 
+                        best_dst_to_zone[1:])
+        
+        return [complete_path]
+    
+    return []
+
+def get_node_styling(node, ground_stations, shortest_path, spare_path=None):
     """Determine node color and size based on node type."""
     if node in ground_stations:
         return 'red', 400
+    elif spare_path and node in spare_path:
+        return 'green', 300
     elif node in shortest_path:
         return 'royalblue', 300
     else:
         return 'skyblue', 200
 
-def get_edge_styling(edge, shortest_path, ground_stations):
+def get_edge_styling(edge, shortest_path, ground_stations, spare_path=None):
     """Determine edge color, width, and style based on edge type."""
     node1, node2 = edge
-    if node1 in shortest_path and node2 in shortest_path:
-        return 'black', 2, '-'
-    elif node1 in ground_stations or node2 in ground_stations:
+    
+    # Check if this edge is actually part of the spare path sequence
+    if spare_path:
+        for i in range(len(spare_path) - 1):
+            if (node1 == spare_path[i] and node2 == spare_path[i + 1]) or \
+               (node2 == spare_path[i] and node1 == spare_path[i + 1]):
+                return 'green', 2, '-'
+    
+    # Check if edge is part of shortest path sequence
+    if shortest_path:
+        for i in range(len(shortest_path) - 1):
+            if (node1 == shortest_path[i] and node2 == shortest_path[i + 1]) or \
+               (node2 == shortest_path[i] and node1 == shortest_path[i + 1]):
+                return 'black', 2, '-'
+    
+    # Ground station connections
+    if node1 in ground_stations or node2 in ground_stations:
         return 'blue', 0.5, '--'
-    else:
-        return 'gray', 0.5, '-'
+        
+    # All other edges
+    return 'gray', 0.5, '-'
 
-def plot_network(subgraph, positions, shortest_path, ground_stations, spare_zones):
+def plot_spare_zone(positions, spare_zone, zone_index):
+    """Plot a single spare zone with offset box."""
+    offset = 0.25
+    zone_coords = [
+        (positions[spare_zone[0]][0] - 2*offset, positions[spare_zone[0]][1] + offset),
+        (positions[spare_zone[1]][0] + offset, positions[spare_zone[1]][1] + offset),
+        (positions[spare_zone[3]][0] + 2*offset, positions[spare_zone[3]][1] - offset),
+        (positions[spare_zone[2]][0] - offset, positions[spare_zone[2]][1] - offset),
+    ]
+    
+    zone_x, zone_y = zip(*zone_coords)
+    zone_x = list(zone_x) + [zone_x[0]]
+    zone_y = list(zone_y) + [zone_y[0]]
+    
+    plt.plot(zone_x, zone_y, 'r--', linewidth=1.0, label=f"Spare Capacity Zone {zone_index+1}")
+
+def plot_network(subgraph, positions, shortest_path, ground_stations, spare_zones, spare_path=None):
     """Plot the network graph with all styling and annotations."""
     plt.figure(figsize=(12, 12))
     
@@ -173,7 +275,7 @@ def plot_network(subgraph, positions, shortest_path, ground_stations, spare_zone
     node_colors = []
     node_sizes = []
     for node in subgraph.nodes():
-        color, size = get_node_styling(node, ground_stations, shortest_path)
+        color, size = get_node_styling(node, ground_stations, shortest_path, spare_path)
         node_colors.append(color)
         node_sizes.append(size)
     
@@ -182,7 +284,7 @@ def plot_network(subgraph, positions, shortest_path, ground_stations, spare_zone
     edge_widths = []
     edge_styles = []
     for edge in subgraph.edges():
-        color, width, style = get_edge_styling(edge, shortest_path, ground_stations)
+        color, width, style = get_edge_styling(edge, shortest_path, ground_stations, spare_path)
         edge_colors.append(color)
         edge_widths.append(width)
         edge_styles.append(style)
@@ -208,22 +310,6 @@ def plot_network(subgraph, positions, shortest_path, ground_stations, spare_zone
     plt.axis('off')
     plt.show()
 
-def plot_spare_zone(positions, spare_zone, zone_index):
-    """Plot a single spare zone with offset box."""
-    offset = 0.25
-    zone_coords = [
-        (positions[spare_zone[0]][0] - 2*offset, positions[spare_zone[0]][1] + offset),
-        (positions[spare_zone[1]][0] + offset, positions[spare_zone[1]][1] + offset),
-        (positions[spare_zone[3]][0] + 2*offset, positions[spare_zone[3]][1] - offset),
-        (positions[spare_zone[2]][0] - offset, positions[spare_zone[2]][1] - offset),
-    ]
-    
-    zone_x, zone_y = zip(*zone_coords)
-    zone_x = list(zone_x) + [zone_x[0]]
-    zone_y = list(zone_y) + [zone_y[0]]
-    
-    plt.plot(zone_x, zone_y, 'r--', linewidth=1.0, label=f"Spare Capacity Zone {zone_index+1}")
-
 def main():
     # Constants
     GROUND_STATIONS = [-1, -2]  # LDN and NYC
@@ -242,15 +328,29 @@ def main():
     
     subgraph = create_subgraph(G, positions, GROUND_STATIONS)
     
-    # Find paths
+    # Find regular shortest paths
     paths, lengths = find_multiple_paths(subgraph)
     if paths:
+        print("\nRegular shortest paths:")
         for i, (path, length) in enumerate(zip(paths, lengths)):
             print(f"Path {i+1}: {path}")
             print(f"Length {i+1}: {length}")
     
-    # Plot network
-    plot_network(subgraph, positions, paths[0] if paths else [], GROUND_STATIONS, SPARE_ZONES)
+    # Find path via spare zones
+    spare_paths = find_path_via_spare_zones(subgraph, positions, nodes_in_zones)
+    if spare_paths:
+        print("\nPath via spare zones:")
+        for i, path in enumerate(spare_paths):
+            print(f"Spare zone path {i+1}: {path}")
+            length = sum(subgraph[u][v]['length'] for u, v in zip(path, path[1:]))
+            print(f"Length: {length}")
+    
+    # Plot network with both regular shortest path and spare zone path
+    plot_network(subgraph, positions, 
+                shortest_path=paths[0] if paths else [],
+                ground_stations=GROUND_STATIONS,
+                spare_zones=SPARE_ZONES,
+                spare_path=spare_paths[0] if spare_paths else None)
 
 if __name__ == "__main__":
     main()
