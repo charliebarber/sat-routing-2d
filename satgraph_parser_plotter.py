@@ -21,26 +21,90 @@ def parse_network_file(filename):
     
     return G
 
+def get_node_position(node):
+    """Calculate the position for a single node, handling the wrapping behavior."""
+    if node < 0:
+        return None
+        
+    plane = node // 66  # 66 sats per plane
+    index_in_plane = 66 - (node - (66 * plane))
+    
+    # Handle the wrapping behavior
+    if index_in_plane > 32:
+        x = index_in_plane - 33
+    else:
+        x = index_in_plane + 33
+    y = -plane
+    
+    return x, y
+
 def calculate_node_positions(G):
     """Calculate positions for all nodes in the graph."""
     positions = {}
     for node in G.nodes():
         if node >= 0:
-            plane = node // 66  # 66 sats per plane
-            index_in_plane = 66 - (node - (66 * plane))
-            
-            if index_in_plane > 32:
-                x = index_in_plane - 33
-            else:
-                x = index_in_plane + 33
-            y = -plane
-            positions[node] = (x, y)
-    
-    # Set ground station positions
-    positions[-1] = (38.5, -5.5)  # LDN
-    positions[-2] = (25, -6.5)    # NYC
+            positions[node] = get_node_position(node)
+        else:
+            # Set ground station positions
+            if node == -1:
+                positions[node] = (38.5, -5.5)  # LDN
+            elif node == -2:
+                positions[node] = (25, -6.5)    # NYC
     
     return positions
+
+def find_nodes_in_spare_zones(G, spare_zones):
+    """
+    Find all nodes that fall within the specified spare zones, handling the wrapping behavior.
+    
+    Args:
+        G: NetworkX graph
+        spare_zones: List of tuples, each containing (top_left, top_right, bottom_left, bottom_right) node numbers
+        
+    Returns:
+        Dict mapping zone index to list of nodes in that zone
+    """
+    nodes_in_zones = {i: [] for i in range(len(spare_zones))}
+    
+    for node in G.nodes():
+        if node < 0:  # Skip ground stations
+            continue
+            
+        node_pos = get_node_position(node)
+        if not node_pos:
+            continue
+            
+        node_x, node_y = node_pos
+        
+        # Check each spare zone
+        for zone_idx, zone in enumerate(spare_zones):
+            top_left, top_right, bottom_left, bottom_right = zone
+            
+            # Get zone corner positions
+            tl_pos = get_node_position(top_left)
+            tr_pos = get_node_position(top_right)
+            bl_pos = get_node_position(bottom_left)
+            br_pos = get_node_position(bottom_right)
+            
+            # Calculate zone boundaries
+            min_y = min(tl_pos[1], bl_pos[1])
+            max_y = max(tl_pos[1], bl_pos[1])
+            
+            # Handle the wrapped x-coordinates
+            if tl_pos[0] > tr_pos[0]:  # Zone wraps around
+                # Node is in zone if it's either:
+                # 1. Greater than or equal to left boundary
+                # 2. Less than or equal to right boundary
+                in_x_range = (node_x >= tl_pos[0]) or (node_x <= tr_pos[0])
+            else:
+                # Normal case - node must be between boundaries
+                in_x_range = tl_pos[0] <= node_x <= tr_pos[0]
+            
+            # Check if node falls within zone boundaries
+            if in_x_range and min_y <= node_y <= max_y:
+                nodes_in_zones[zone_idx].append(node)
+    
+    return nodes_in_zones
 
 def create_subgraph(G, positions, ground_stations):
     """Create a subgraph containing only relevant nodes."""
@@ -165,9 +229,17 @@ def main():
     GROUND_STATIONS = [-1, -2]  # LDN and NYC
     SPARE_ZONES = [(269, 328, 334, 393), (467, 522, 532, 587)]
     
-    # Build and analyse network
+    # Build and analyze network
     G = parse_network_file('snapshots/snapshot0.02s.txt')
     positions = calculate_node_positions(G)
+    
+    # Find nodes in spare zones
+    nodes_in_zones = find_nodes_in_spare_zones(G, SPARE_ZONES)
+    for zone_idx, nodes in nodes_in_zones.items():
+        print(f"\nNodes in Spare Zone {zone_idx + 1}:")
+        print(f"Total nodes: {len(nodes)}")
+        print(f"Node numbers: {sorted(nodes)}")
+    
     subgraph = create_subgraph(G, positions, GROUND_STATIONS)
     
     # Find paths
