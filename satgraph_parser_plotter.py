@@ -149,7 +149,7 @@ def find_multiple_paths(subgraph, source=-1, target=-2):
 def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2, excluded_edges=None):
     """
     Find path from source to destination via spare zones with weight 25% above shortest path,
-    using the same initial ground station link as the shortest path.
+    using the same initial ground station link as the shortest path and no link reuse.
     """
     excluded_edges = excluded_edges or []
     G_copy = G.copy()
@@ -159,39 +159,68 @@ def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2
     try:
         shortest_path = nx.shortest_path(G_copy, source=source, target=target, weight='length')
         shortest_weight = sum(G_copy[u][v]['length'] for u, v in zip(shortest_path, shortest_path[1:]))
-        target_weight = shortest_weight * 1.5
+        target_weight = shortest_weight * 1.4
         
         # Get the first satellite node (after ground station)
         initial_sat = shortest_path[1]
     except nx.NetworkXNoPath:
         return []
     
+    # Initialize variables for best paths
     best_total_path = None
     best_total_weight = float('inf')
     best_zone_idx = None
+    
+    def get_path_links(path):
+        """Convert path to set of link tuples (ensuring ordered pairs)"""
+        links = set()
+        for i in range(len(path)-1):
+            # Store links as ordered tuples (smaller node first) for consistent comparison
+            n1, n2 = path[i], path[i+1]
+            links.add((min(n1, n2), max(n1, n2)))
+        return links
+    
+    def has_link_overlap(path1, path2):
+        """Check if two paths share any links"""
+        links1 = get_path_links(path1)
+        links2 = get_path_links(path2)
+        return bool(links1.intersection(links2))
     
     # Try each zone
     for zone_idx, zone_nodes in nodes_in_zones.items():
         for entry_node in zone_nodes:
             try:
                 # Find path from initial satellite to zone entry
-                # Prepend the ground station link to maintain consistent entry point
                 sat_to_zone = nx.shortest_path(G_copy, source=initial_sat, target=entry_node, weight='length')
                 sat_to_zone_weight = (G_copy[source][initial_sat]['length'] + 
                                     sum(G_copy[u][v]['length'] for u, v in zip(sat_to_zone, sat_to_zone[1:])))
+                
+                # Full path to entry (including ground link)
+                path_to_entry = [source] + sat_to_zone
                 
                 for exit_node in zone_nodes:
                     if exit_node == entry_node:
                         continue
                         
                     try:
-                        # Find path from zone exit to target
-                        zone_to_dst = nx.shortest_path(G_copy, source=exit_node, target=target, weight='length')
-                        zone_to_dst_weight = sum(G_copy[u][v]['length'] for u, v in zip(zone_to_dst, zone_to_dst[1:]))
-                        
                         # Find path through zone
                         in_zone_path = nx.shortest_path(G_copy, source=entry_node, target=exit_node, weight='length')
+                        
+                        # Check if zone path reuses any links from path to entry
+                        if has_link_overlap(path_to_entry, in_zone_path):
+                            continue
+                            
                         in_zone_weight = sum(G_copy[u][v]['length'] for u, v in zip(in_zone_path, in_zone_path[1:]))
+                        
+                        # Find path from zone exit to target
+                        zone_to_dst = nx.shortest_path(G_copy, source=exit_node, target=target, weight='length')
+                        
+                        # Check if final path segment reuses any links
+                        if (has_link_overlap(path_to_entry, zone_to_dst) or 
+                            has_link_overlap(in_zone_path, zone_to_dst)):
+                            continue
+                            
+                        zone_to_dst_weight = sum(G_copy[u][v]['length'] for u, v in zip(zone_to_dst, zone_to_dst[1:]))
                         
                         # Calculate total weight
                         total_weight = sat_to_zone_weight + in_zone_weight + zone_to_dst_weight
@@ -200,9 +229,8 @@ def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2
                         if (abs(total_weight - target_weight) < abs(best_total_weight - target_weight) and 
                             total_weight >= shortest_weight):  # Ensure we don't go below shortest path
                             
-                            # Combine paths, ensuring we start with original ground link
-                            complete_path = ([source] + 
-                                          sat_to_zone + 
+                            # Combine paths
+                            complete_path = (path_to_entry + 
                                           in_zone_path[1:] + 
                                           zone_to_dst[1:])
                             
@@ -221,6 +249,12 @@ def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2
         print(f"Path weight: {best_total_weight:.2f} (shortest possible: {shortest_weight:.2f})")
         print(f"Weight increase: {((best_total_weight/shortest_weight) - 1) * 100:.1f}%")
         print(f"Using same ground entry point: {source} -> {initial_sat}")
+        
+        # Verify no links are reused in final path
+        path_links = get_path_links(best_total_path)
+        if len(path_links) != len(best_total_path) - 1:
+            print("Warning: Found duplicate links in path!")
+            
         return [best_total_path]
     
     return []
