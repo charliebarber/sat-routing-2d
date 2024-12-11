@@ -148,70 +148,80 @@ def find_multiple_paths(subgraph, source=-1, target=-2):
 
 def find_path_via_spare_zones(G, positions, nodes_in_zones, source=-1, target=-2, excluded_edges=None):
     """
-    Find shortest path from source to destination via spare zones.
-    
-    Args:
-        G: NetworkX graph
-        positions: Dict of node positions
-        nodes_in_zones: Dict mapping zone indices to lists of nodes in each zone
-        source: Source node (default: -1 for LDN)
-        target: Target node (default: -2 for NYC)
-        excluded_edges: List of edges to exclude from path finding
-    
-    Returns:
-        List containing the complete path via spare zone
+    Find path from source to destination via spare zones with weight 25% above shortest path,
+    using the same initial ground station link as the shortest path.
     """
     excluded_edges = excluded_edges or []
     G_copy = G.copy()
     G_copy.remove_edges_from(excluded_edges)
     
-    # Initialize variables for best paths
-    best_src_to_zone = []
-    best_dst_to_zone = []
-    best_zone_entry = None
-    best_zone_exit = None
+    # First find the shortest possible path to get initial ground link
+    try:
+        shortest_path = nx.shortest_path(G_copy, source=source, target=target, weight='length')
+        shortest_weight = sum(G_copy[u][v]['length'] for u, v in zip(shortest_path, shortest_path[1:]))
+        target_weight = shortest_weight * 1.5
+        
+        # Get the first satellite node (after ground station)
+        initial_sat = shortest_path[1]
+    except nx.NetworkXNoPath:
+        return []
+    
+    best_total_path = None
+    best_total_weight = float('inf')
     best_zone_idx = None
     
-    # Find best zone and entry/exit points
+    # Try each zone
     for zone_idx, zone_nodes in nodes_in_zones.items():
-        for zone_node in zone_nodes:
+        for entry_node in zone_nodes:
             try:
-                # Find shortest path from source to zone node
-                src_to_zone = nx.shortest_path(G_copy, source=source, target=zone_node, weight='length')
+                # Find path from initial satellite to zone entry
+                # Prepend the ground station link to maintain consistent entry point
+                sat_to_zone = nx.shortest_path(G_copy, source=initial_sat, target=entry_node, weight='length')
+                sat_to_zone_weight = (G_copy[source][initial_sat]['length'] + 
+                                    sum(G_copy[u][v]['length'] for u, v in zip(sat_to_zone, sat_to_zone[1:])))
                 
-                # Update if this is the shortest path found so far
-                if not best_src_to_zone or len(src_to_zone) < len(best_src_to_zone):
-                    best_src_to_zone = src_to_zone
-                    best_zone_entry = zone_node
-                    best_zone_idx = zone_idx
+                for exit_node in zone_nodes:
+                    if exit_node == entry_node:
+                        continue
+                        
+                    try:
+                        # Find path from zone exit to target
+                        zone_to_dst = nx.shortest_path(G_copy, source=exit_node, target=target, weight='length')
+                        zone_to_dst_weight = sum(G_copy[u][v]['length'] for u, v in zip(zone_to_dst, zone_to_dst[1:]))
+                        
+                        # Find path through zone
+                        in_zone_path = nx.shortest_path(G_copy, source=entry_node, target=exit_node, weight='length')
+                        in_zone_weight = sum(G_copy[u][v]['length'] for u, v in zip(in_zone_path, in_zone_path[1:]))
+                        
+                        # Calculate total weight
+                        total_weight = sat_to_zone_weight + in_zone_weight + zone_to_dst_weight
+                        
+                        # Check if this path is closer to our target weight
+                        if (abs(total_weight - target_weight) < abs(best_total_weight - target_weight) and 
+                            total_weight >= shortest_weight):  # Ensure we don't go below shortest path
+                            
+                            # Combine paths, ensuring we start with original ground link
+                            complete_path = ([source] + 
+                                          sat_to_zone + 
+                                          in_zone_path[1:] + 
+                                          zone_to_dst[1:])
+                            
+                            best_total_path = complete_path
+                            best_total_weight = total_weight
+                            best_zone_idx = zone_idx
+                            
+                    except nx.NetworkXNoPath:
+                        continue
+                        
             except nx.NetworkXNoPath:
                 continue
     
-    # If we found a valid zone entry point, find best exit point
-    if best_zone_entry is not None:
-        for zone_node in nodes_in_zones[best_zone_idx]:
-            try:
-                # Find shortest path from zone node to destination
-                dst_to_zone = nx.shortest_path(G_copy, source=target, target=zone_node, weight='length')
-                
-                # Update if this is the shortest path found so far
-                if not best_dst_to_zone or len(dst_to_zone) < len(best_dst_to_zone):
-                    best_dst_to_zone = dst_to_zone[::-1]  # Reverse path since we found it backwards
-                    best_zone_exit = zone_node
-            except nx.NetworkXNoPath:
-                continue
-    
-    # If we found valid entry and exit points, construct complete path
-    if best_zone_entry is not None and best_zone_exit is not None:
-        # Find path through the zone
-        in_zone_path = nx.shortest_path(G_copy, source=best_zone_entry, target=best_zone_exit, weight='length')
-        
-        # Combine paths, removing duplicate nodes at connections
-        complete_path = (best_src_to_zone[:-1] + 
-                        in_zone_path + 
-                        best_dst_to_zone[1:])
-        
-        return [complete_path]
+    if best_total_path:
+        print(f"\nFound path through zone {best_zone_idx + 1}")
+        print(f"Path weight: {best_total_weight:.2f} (shortest possible: {shortest_weight:.2f})")
+        print(f"Weight increase: {((best_total_weight/shortest_weight) - 1) * 100:.1f}%")
+        print(f"Using same ground entry point: {source} -> {initial_sat}")
+        return [best_total_path]
     
     return []
 
