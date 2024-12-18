@@ -88,7 +88,7 @@ def plot_network(subgraph: nx.Graph, positions: Dict, shortest_path: List[int],
     edge_labels = nx.get_edge_attributes(subgraph, 'length')
     rounded_edge_labels = {key: round(val, 1) for key, val in edge_labels.items()}
     nx.draw_networkx_edge_labels(subgraph, positions, edge_labels=rounded_edge_labels, 
-                                font_size=3, verticalalignment="bottom", alpha=0.9)
+                                font_size=6, verticalalignment="bottom", alpha=0.9)
     
     # Draw spare zones
     for i, spare_zone in enumerate(spare_zones):

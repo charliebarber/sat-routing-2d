@@ -8,7 +8,10 @@ GROUND_STATION_POSITIONS = {
 }
 
 # Spare zone configurations
-SPARE_ZONES = [(269, 328, 334, 393), (467, 522, 532, 587)]
+# SPARE_ZONES = [(269, 328, 334, 393), (467, 522, 532, 587)]
+# SPARE_ZONES = [(467, 522, 532, 587)]
+SPARE_ZONES = [(269, 266, 334, 331), (264, 326, 395, 391)]
+# SPARE_ZONES = [(269, 266, 334, 331), (264, 326, 395, 391), (467, 463, 532, 528), (527, 523, 527, 523)]
 
 # Network parameters
 SATS_PER_PLANE = 66
