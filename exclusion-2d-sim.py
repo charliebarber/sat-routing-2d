@@ -54,75 +54,65 @@ def plot_inclined_constellation(G, pos, paths, excluded_edges=None, spare_zones=
     excluded_edges = excluded_edges or []
     plt.figure(figsize=(14, 10))
 
-    # Draw the entire constellation first with light edges
-    nx.draw(G, pos, with_labels=False, node_size=100, node_color="lightblue", edge_color="gray")
+    # Generate a distinct color for each plane
+    num_planes = max(node[0] for node in G.nodes if isinstance(node, tuple)) + 1
+    plane_colors = plt.cm.tab10(np.linspace(0, 1, num_planes))
 
-    # Edge usage count to track shared edges
-    edge_usage = {}
+    # Assign a color to each plane and draw the nodes
+    for plane in range(num_planes):
+        plane_nodes = [node for node in G.nodes if isinstance(node, tuple) and node[0] == plane]
+        nx.draw_networkx_nodes(G, pos, nodelist=plane_nodes, node_size=100, node_color=[plane_colors[plane]])
 
-    # Color code for paths (4 paths)
-    colors = ["red", "blue", "green", "purple"]
-
-    # Iterate through each path and count the edge usage
-    for i, path in enumerate(paths):
-        path_edges = list(zip(path, path[1:]))
-        
-        # Increment usage for each edge in the path
-        for edge in path_edges:
-            if edge not in edge_usage:
-                edge_usage[edge] = 0
-            edge_usage[edge] += 1
-        
-        # Draw the path edges with transparency or varying thickness
-        for edge in path_edges:
-            # Calculate transparency based on usage (more paths -> more transparency)
-            usage = edge_usage[edge]
-            alpha = max(0.2, 1 - 0.3 * (usage - 1))  # Set a minimum opacity to avoid complete transparency
-            nx.draw_networkx_edges(G, pos, edgelist=[edge], width=2.5, edge_color=colors[i], alpha=alpha)
-
-        nx.draw_networkx_nodes(G, pos, nodelist=path, node_size=150, node_color=colors[i])
-
-        # Log the path to the console
-        print(f"Path {i+1}: {path}")
+    # Draw all edges with light gray
+    nx.draw_networkx_edges(G, pos, edge_color="lightgray")
 
     # Highlight excluded edges (black dashed lines)
     for edge in excluded_edges:
         nx.draw_networkx_edges(G, pos, edgelist=[edge], edge_color="black", width=2, style='dashed')
 
-    # Highlight ground stations
+    # Highlight paths with distinct colors
+    path_colors = ["red", "blue", "green", "purple"]
+    edge_usage = {}
+    for i, path in enumerate(paths):
+        path_edges = list(zip(path, path[1:]))
+        for edge in path_edges:
+            if edge not in edge_usage:
+                edge_usage[edge] = 0
+            edge_usage[edge] += 1
+        for edge in path_edges:
+            usage = edge_usage[edge]
+            alpha = max(0.2, 1 - 0.3 * (usage - 1))
+            nx.draw_networkx_edges(G, pos, edgelist=[edge], width=2.5, edge_color=path_colors[i % len(path_colors)], alpha=alpha)
+        nx.draw_networkx_nodes(G, pos, nodelist=path, node_size=150, node_color=path_colors[i % len(path_colors)])
+
+    # Draw ground stations
     nx.draw_networkx_nodes(G, pos, nodelist=["LDN"], node_color="red", node_size=300, label="LDN")
     nx.draw_networkx_nodes(G, pos, nodelist=["NYC"], node_color="green", node_size=300, label="NYC")
 
     # Add labels for ground stations
     nx.draw_networkx_labels(G, pos, labels={"LDN": "LDN", "NYC": "NYC"}, font_size=12, font_color="black")
 
+    # Highlight spare zones
     for i, spare_zone in enumerate(spare_zones):
-        # Get the coordinates of the nodes and apply an offset to create a slightly larger box
-        offset = 0.3  # Adjust this value to control the offset size
+        offset = 0.3
         zone_coords = [
-            (pos[spare_zone[0]][0] - 2*offset, pos[spare_zone[0]][1] + offset),  # Top left corner
-            (pos[spare_zone[1]][0] + offset, pos[spare_zone[1]][1] + offset),  # Top right corner
-            (pos[spare_zone[3]][0] + 2*offset, pos[spare_zone[3]][1] - offset),  # Top-right corner
-            (pos[spare_zone[2]][0] - offset, pos[spare_zone[2]][1] - offset),  # Bottom-right corner
+            (pos[spare_zone[0]][0] - 2 * offset, pos[spare_zone[0]][1] + offset),
+            (pos[spare_zone[1]][0] + offset, pos[spare_zone[1]][1] + offset),
+            (pos[spare_zone[3]][0] + 2 * offset, pos[spare_zone[3]][1] - offset),
+            (pos[spare_zone[2]][0] - offset, pos[spare_zone[2]][1] - offset),
         ]
-
-        # Unpack x and y coordinates for plotting
         zone_x, zone_y = zip(*zone_coords)
-        
-        # Close the quadrilateral by appending the first corner to the end of the lists
         zone_x = list(zone_x) + [zone_x[0]]
         zone_y = list(zone_y) + [zone_y[0]]
+        plt.plot(zone_x, zone_y, 'r--', linewidth=1.5, label=f"Spare Capacity Zone {i + 1}")
 
-        # Draw the offset dotted box around the spare capacity zone
-        plt.plot(zone_x, zone_y, 'r--', linewidth=1.5, label=f"Spare Capacity Zone {i+1}")
-
-    # Add satellite position labels
+    # Add satellite labels
     satellite_labels = {node: f"{node}" for node in G.nodes if isinstance(node, tuple)}
     for node, (x, y) in pos.items():
         if node in satellite_labels:
-            plt.text(x-0.1, y - 0.25, satellite_labels[node], fontsize=8, ha="center", color="darkblue")
+            plt.text(x - 0.1, y - 0.25, satellite_labels[node], fontsize=8, ha="center", color="darkblue")
 
-    plt.title("Inclined 2D Projection of Satellite Constellation with Highlighted Paths")
+    plt.title("Inclined 2D Projection of Satellite Constellation with Color-coded Planes")
     plt.legend(loc="upper right")
     plt.show()
 
