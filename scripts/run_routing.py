@@ -6,6 +6,7 @@ sys.path.append(str(Path(__file__).parent.parent / "src"))
 from satrouting.config import (
     GROUND_STATIONS,
     SPARE_ZONES,
+    TARGET_WEIGHT_FACTOR,
 )
 from satrouting.graph_utils import parse_network_file, create_subgraph
 from satrouting.position_utils import calculate_node_positions
@@ -47,7 +48,7 @@ def main():
         return
     
     # Find path via spare zones
-    spare_paths = find_path_via_spare_zones(subgraph, positions, nodes_in_zones)
+    spare_paths = find_path_via_spare_zones(subgraph, positions, nodes_in_zones, TARGET_WEIGHT_FACTOR)
     if spare_paths:
         print("\nPath via spare zones:")
         for i, path in enumerate(spare_paths):

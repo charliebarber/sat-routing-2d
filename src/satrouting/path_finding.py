@@ -106,7 +106,7 @@ def find_paths_recursive(G, current_node, target, nodes_in_zones,
             except nx.NetworkXNoPath:
                 continue
 
-def find_path_via_spare_zones(G: nx.Graph, positions: Dict, nodes_in_zones: Dict, 
+def find_path_via_spare_zones(G: nx.Graph, positions: Dict, nodes_in_zones: Dict, target_weight_factor: float,
                             source: int = -1, target: int = -2) -> List[List[int]]:
     """
     Find paths via spare zones using same initial RF link as shortest path,
@@ -119,7 +119,7 @@ def find_path_via_spare_zones(G: nx.Graph, positions: Dict, nodes_in_zones: Dict
     # Initial setup
     shortest_path = nx.shortest_path(G_copy, source=source, target=target, weight='length')
     shortest_weight = sum(G_copy[u][v]['length'] for u,v in zip(shortest_path, shortest_path[1:]))
-    target_weight = shortest_weight * 1.25
+    target_weight = shortest_weight * target_weight_factor
     initial_sat = shortest_path[1]
     
     # Get edges to exclude (from shortest path)

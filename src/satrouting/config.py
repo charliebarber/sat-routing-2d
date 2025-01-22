@@ -23,4 +23,4 @@ DISPLAY_BOUNDS = {
 }
 
 # Routing parameters
-TARGET_WEIGHT_FACTOR = 1.25  # 25% above shortest path
+TARGET_WEIGHT_FACTOR = 1.25 # 25% above shortest path
