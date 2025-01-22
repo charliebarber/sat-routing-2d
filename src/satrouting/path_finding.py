@@ -27,7 +27,28 @@ def find_multiple_paths(G: nx.Graph, source: int = -1, target: int = -2) -> Tupl
 def find_paths_recursive(G, current_node, target, nodes_in_zones, 
                         path_so_far, weight_so_far, target_weight,
                         excluded_edges, visited_zones, paths_found,
-                        SATS_PER_PLANE, direction=None):
+                        SATS_PER_PLANE, max_depth, current_depth=0,
+                        weight_ceiling=None, direction=None):
+    """
+    Args:
+        ... (previous args) ...
+        max_depth: Maximum number of zones to visit
+        current_depth: Current recursion depth
+        weight_ceiling: Maximum allowed path weight (default: 1.5 * target_weight)
+    """
+    # Set weight ceiling if not provided
+    if weight_ceiling is None:
+        weight_ceiling = target_weight * 1.5
+        
+    # Stop if we've exceeded depth or weight limits
+    if current_depth >= max_depth or weight_so_far > weight_ceiling:
+        return
+        
+    # Early stopping if we've found enough good paths
+    # (paths within 5% of target weight)
+    good_paths = sum(1 for _, w in paths_found if abs(w - target_weight) < target_weight * 0.05)
+    if good_paths >= 3:  # Arbitrary threshold, can be adjusted
+        return
     """
     Recursive helper to find paths through zones
     
@@ -100,6 +121,9 @@ def find_paths_recursive(G, current_node, target, nodes_in_zones,
                     visited_zones | {zone_idx},
                     paths_found,
                     SATS_PER_PLANE,
+                    max_depth,
+                    current_depth + 1,
+                    weight_ceiling,
                     new_direction
                 )
                 
@@ -137,6 +161,7 @@ def find_path_via_spare_zones(G: nx.Graph, positions: Dict, nodes_in_zones: Dict
     initial_path = [source, initial_sat]
     
     # Start recursive search
+    max_depth = 2  # Limit to visiting 3 zones maximum
     find_paths_recursive(
         G_copy, initial_sat, target,
         nodes_in_zones,
@@ -146,7 +171,8 @@ def find_path_via_spare_zones(G: nx.Graph, positions: Dict, nodes_in_zones: Dict
         excluded_edges,
         set(),  # No zones visited yet
         paths_found,
-        SATS_PER_PLANE
+        SATS_PER_PLANE,
+        max_depth
     )
     
     if paths_found:
